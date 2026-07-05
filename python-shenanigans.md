@@ -7,8 +7,9 @@
 ## §1 — `pip install` hits the PEP 668 "externally-managed-environment" wall → use a venv, NEVER `--break-system-packages`
 
 Modern system Pythons (Debian/Ubuntu, Homebrew) refuse `pip install` outside a venv with
-`error: externally-managed-environment`. The tempting one-liner `--break-system-packages` corrupts
-the system Python the OS depends on — don't. Always:
+`error: externally-managed-environment`. The tempting one-liner `--break-system-packages` can break a
+package-manager-managed Python — on Debian/Ubuntu, the system Python that OS tools depend on — so
+don't. Always:
 ```bash
 python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 ```
@@ -28,8 +29,9 @@ multiprocessing outside `__main__`.
 ## §3 — `pip install -e .` silently installs NOTHING when `.git` is missing/excluded
 
 Packages with a VCS/dynamic-version backend (setuptools-scm / hatch-vcs / poetry-dynamic-versioning)
-need `.git` to build. Copy/rsync a repo with `.git` excluded, `pip install -e .` → **exits 0,
-installs nothing** (`pip list` shows only pip; `import pkg` → ModuleNotFoundError). Workaround:
+need `.git` to build. Copy/rsync a repo with `.git` excluded and `pip install -e .` can **silently
+misbehave** — depending on the backend, it may exit 0 with **nothing installed** or install a **bogus
+fallback version** (e.g. `0.0.0`). Always verify with `pip show <pkg>` + the import path. Workaround:
 install deps from PyPI, then shadow with the source tree via `PYTHONPATH`:
 ```bash
 venv/bin/pip install <pkg> <extra-deps>              # full dep tree from wheels

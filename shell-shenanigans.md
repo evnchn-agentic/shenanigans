@@ -19,11 +19,13 @@ not depend on a *second* invocation to disarm it.** Between two automation steps
 "energize for 3 s" become 30 s, or **never disarm at all**.
 
 Rules:
-- **One script does arm → wait → disarm**, never split across calls. Put the disarm in a
-  `trap '<disarm>' EXIT INT TERM` so it fires even on error/kill, AND bound it with `timeout`.
+- **One script does arm → wait → disarm**, never split across calls. Put the disarm in a `trap`
+  (fires on error / Ctrl-C / SIGTERM — **not** on SIGKILL / `kill -9`, which cannot be trapped), and
+  bound the whole run with `timeout` from the caller so even a hang disarms.
   ```bash
-  trap 'disarm' EXIT INT TERM      # fires on normal exit, Ctrl-C, kill, AND on script error
+  trap 'disarm' EXIT INT TERM      # normal exit, Ctrl-C, SIGTERM, AND script error — but NOT kill -9
   arm; sleep 3; disarm             # disarm also runs explicitly; the trap is the safety net
+  # caller bounds it:   timeout 10 ./arm-and-run.sh
   ```
 - Prefer a **hardware-side watchdog / dead-man timer** (firmware disarms itself if not pinged) over
   any host-side timing. The host is the unreliable party.
@@ -82,4 +84,4 @@ recursion only fires at first runtime call.
   self-match.
 - If regex is unavoidable: anchor on the call-site-only form, or define the helper in a sentinel
   shape the regex won't match, then re-edit. **Always run the full test suite / E2E after the replace.**
-- Note `perl -i`/`sed -i` edit in place = irreversible without a backup — pair with §3 / git-shenanigans (copy or bundle first).
+- Note `perl -i`/`sed -i` edit in place = irreversible without a backup — copy or `git bundle` first (see git-shenanigans §3).

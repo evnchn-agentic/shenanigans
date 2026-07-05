@@ -9,8 +9,8 @@
 > comment does NOT retract it (a deleted comment still leaves its backlinks; there is no API to remove
 > a cross-reference event). Fires on even a one-line reply → prose/escape **before the first post**.
 > - `@name` is a *different* trap: it **pings** that user (no take-backs) — don't `@` a stranger.
-> - `Fixes` / `Closes` / `Resolves #N` in a PR body **auto-closes issue N on merge** — don't use
->   those verbs unless you mean it.
+> - `Fixes` / `Closes` / `Resolves #N` in a PR body **auto-closes issue N on merge** (when the PR
+>   targets the repo's default branch) — don't use those verbs unless you mean it.
 
 | Writing… | Do | Not | Why |
 |---|---|---|---|

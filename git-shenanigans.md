@@ -36,5 +36,5 @@ for "which closures were mine": `closedAt == deletion-second`.
 ```bash
 git bundle create ~/backup-$(git rev-parse --short HEAD).bundle --all   # before the dangerous op
 ```
-Force-push to a branch with an upstream PR also **DISMISSES the approval** (dismiss-stale). Default to
-add-commit-on-top, not force-push, on upstream PRs.
+Force-push to a branch with an open PR **can dismiss existing approvals** (if the repo enables "dismiss
+stale reviews"). Default to add-commit-on-top, not force-push, on PRs under review.
