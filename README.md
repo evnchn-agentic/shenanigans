@@ -23,7 +23,6 @@ zsh loop that silently does nothing. A `pip install -e .` that exits 0 and insta
 | [`shell-shenanigans.md`](shell-shenanigans.md) | writing any shell loop, or a hardware/irreversible script (zsh or bash) |
 | [`python-shenanigans.md`](python-shenanigans.md) | writing or installing Python |
 | [`applescript-shenanigans.md`](applescript-shenanigans.md) | any osascript / AppleScript automation on macOS |
-| [`bambu-studio-shenanigans.md`](bambu-studio-shenanigans.md) | driving the Bambu Studio slicer |
 
 ## Using these with an AI coding agent
 
