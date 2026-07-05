@@ -38,5 +38,5 @@ tool/surface.
 
 ## License
 
-Released under [CC0-1.0](LICENSE) — public domain. Copy, adapt, and paste these into your own agent
+Released under the [MIT License](LICENSE). Copy, adapt, and paste these into your own agent
 instructions freely.
