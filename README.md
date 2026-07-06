@@ -22,6 +22,7 @@ zsh loop that silently does nothing. A `pip install -e .` that exits 0 and insta
 | [`git-shenanigans.md`](git-shenanigans.md) | any irreversible git op (branch -D, mass-delete, force-push, rebase) |
 | [`shell-shenanigans.md`](shell-shenanigans.md) | writing any shell loop, or a hardware/irreversible script (zsh or bash) |
 | [`python-shenanigans.md`](python-shenanigans.md) | writing or installing Python |
+| [`cpp-shenanigans.md`](cpp-shenanigans.md) | writing or reviewing C or C++ (undefined behavior a green `-O2` build can hide) |
 | [`applescript-shenanigans.md`](applescript-shenanigans.md) | any osascript / AppleScript automation on macOS |
 
 ## Using these with an AI coding agent
