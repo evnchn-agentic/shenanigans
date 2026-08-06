@@ -14,6 +14,10 @@ Because these aren't bugs in *your* code — they're the tool doing something su
 code. A markdown comment that spams a permanent backlink. A `move` that destroys a browser tab. A
 zsh loop that silently does nothing. A `pip install -e .` that exits 0 and installs nothing.
 
+Most of these fail *destructively*. One (`claude-code-shenanigans.md`) fails the opposite way — the
+command never runs at all, and an overnight agent is still sitting at an approval prompt in the morning.
+Same genus: the surprise is in the tool, not your code.
+
 ## The files
 
 | File | Read before… |
@@ -25,6 +29,7 @@ zsh loop that silently does nothing. A `pip install -e .` that exits 0 and insta
 | [`cpp-shenanigans.md`](cpp-shenanigans.md) | writing or reviewing C or C++ (undefined behavior a green `-O2` build can hide) |
 | [`applescript-shenanigans.md`](applescript-shenanigans.md) | any osascript / AppleScript automation on macOS |
 | [`macos-shenanigans.md`](macos-shenanigans.md) | any filename / path / asset check on a Mac that a Linux server will re-run |
+| [`claude-code-shenanigans.md`](claude-code-shenanigans.md) | letting an agent run **unattended** — the command shapes that halt it at an approval prompt |
 
 ## Using these with an AI coding agent
 
