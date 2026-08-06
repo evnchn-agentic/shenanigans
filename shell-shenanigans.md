@@ -85,3 +85,20 @@ recursion only fires at first runtime call.
 - If regex is unavoidable: anchor on the call-site-only form, or define the helper in a sentinel
   shape the regex won't match, then re-edit. **Always run the full test suite / E2E after the replace.**
 - Note `perl -i`/`sed -i` edit in place = irreversible without a backup — copy or `git bundle` first (see git-shenanigans §3).
+
+## §6 — `pkill -f "dir/name.py"` silently matches NOTHING after a `cd`, and `; echo stopped` lies about it
+
+`pkill -f` matches a process's **actual argv**, not the path you think of it by. `cd /some/dir &&
+nohup python demo.py &` yields argv `python demo.py` — so `pkill -f "some/dir/demo.py"` matches
+nothing and exits 1, while the server keeps listening (observed: a dev server still up **5 days**
+after being reported stopped).
+- The lie is in the composition, not the kill: `pkill -f "…" ; echo stopped` prints `stopped`
+  unconditionally, and `pkill -f "…" && echo killed; echo done` reports the *last* command's status.
+  A cleanup command's exit code is never evidence of cleanup.
+- **Kill by PID captured at launch** — `nohup cmd & echo $!` — or run `pgrep -fl <coarse>` FIRST and
+  read the real argv before choosing a pattern.
+- **Verify the effect, not the command**, as a separate step: `lsof -nP -iTCP:<port> -sTCP:LISTEN`,
+  or a re-`pgrep`. "The kill command ran" and "the process is gone" are different claims.
+- Opposite failure, worse: `pkill -f` matches the pattern **anywhere in the full command line**, so a
+  broad pattern (`pkill -f python`) can kill unrelated processes — including the agent harness or the
+  shell issuing the command. Narrow the pattern, or use the PID.
