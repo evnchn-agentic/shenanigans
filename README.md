@@ -24,6 +24,7 @@ zsh loop that silently does nothing. A `pip install -e .` that exits 0 and insta
 | [`python-shenanigans.md`](python-shenanigans.md) | writing or installing Python |
 | [`cpp-shenanigans.md`](cpp-shenanigans.md) | writing or reviewing C or C++ (undefined behavior a green `-O2` build can hide) |
 | [`applescript-shenanigans.md`](applescript-shenanigans.md) | any osascript / AppleScript automation on macOS |
+| [`macos-shenanigans.md`](macos-shenanigans.md) | any filename / path / asset check on a Mac that a Linux server will re-run |
 
 ## Using these with an AI coding agent
 
