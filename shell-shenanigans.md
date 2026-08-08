@@ -102,3 +102,34 @@ after being reported stopped).
 - Opposite failure, worse: `pkill -f` matches the pattern **anywhere in the full command line**, so a
   broad pattern (`pkill -f python`) can kill unrelated processes — including the agent harness or the
   shell issuing the command. Narrow the pattern, or use the PID.
+
+## §7 — `rg -r` is `--replace`, NOT "recursive" — `rg -rn` silently rewrites every match
+
+Muscle memory from `grep -rn` types `-rn` at ripgrep. But **rg recurses by default**, and `-r` takes
+an argument: `-r REPLACEMENT` / `--replace=REPLACEMENT`. So `rg -rn 'pat' path` parses as *"replace
+each match with the string `n`"* — the `-n` you meant is eaten as the replacement value.
+
+MRE:
+
+```console
+$ printf 'alpha beta\n' | rg -rn 'alpha'
+n beta                     # match rewritten to "n"; no line number
+$ printf 'alpha beta\n' | rg -n 'alpha'
+1:alpha beta               # what you wanted
+```
+
+**Why this is worse than a normal typo: it does not error, and the output still looks like results.**
+You get real file paths and real surrounding line content — only the matched substring is replaced.
+Searching source for API calls with `rg -rn 'mermaid\.[a-zA-Z]+'` returns lines reading `n()` and
+`n.org`, which parse as plausible identifiers. An agent (or human) can read that output and conclude
+the code calls a different API than it does. Observed 2026-08-08 while auditing which mermaid
+functions a project used; the real calls were `mermaid.initialize()` / `mermaid.render()`.
+
+- **The tell: your line numbers vanished.** If you asked for `-n` and got no `N:` prefixes, `-n` was
+  consumed as an argument. Same tell for `rg -rl`, `rg -ri`, etc.
+- **Fix: just drop the `-r`.** `rg -n 'pat' path` — recursion is already the default.
+- If you genuinely want replacement, write it unambiguously: `rg --replace='X' 'pat'`, never bundled
+  into a short-flag cluster.
+- Same family as a sweep returning **all zeros**: output shaped like data, produced by a wrong flag
+  rather than by the corpus. Sanity-check any search whose result would change a conclusion — grep
+  for a string you *know* is present and confirm it comes back verbatim.
