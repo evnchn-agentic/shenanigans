@@ -18,9 +18,9 @@
 | a **real ticket ref** to link | bare **`#123`** | `` `#123` `` (backticks kill the link) | you *want* the autolink |
 | a **commit SHA** | bare **`a1b2c3d`** (resolvable 7+/40-char SHA → autolinks, hover) | `` `a1b2c3d` `` (dead text) | backticks kill the useful link |
 | a ticket you must name but NOT link | escape **`\#6`** (renders "#6", no link) | bare `#6` | suppression fallback when prose won't do |
-| anything appended **after a `<details>` fold** | own paragraph, blank line after `</details>` | `</details> [x](url)` → the literal text `[x](url)` | the closing line of an HTML block is still *inside* it, so markdown there is never parsed |
+| anything appended **after an HTML block** (`</details>` fold, `</div>`) | **blank line**, then its own paragraph | `</details> [x](url)` *and* `</details>`⏎`[x](url)` → both emit the literal `[x](url)` | an HTML block runs until a **blank line**, so a newline alone leaves you still inside it |
 
-**Silent (no error, no warning — the link just becomes text):** markdown on the **closing line of an HTML block** is not parsed. This bites hardest when a comment's last element is a `<details>` fold *and* some convention tells you to append something "at the very end, after the final punctuation" — AI-authorship sigils, footers, badges, shields. The two rules collide and the appended link dies silently; a convention that says "one space before" is actively steering you into it. Blank line, own paragraph.
+**Silent (no error, no warning — the link just becomes text):** markdown that follows an HTML block without a **blank line** is not parsed. Note the near-miss: moving the link off the closing line onto the next line **still fails** — only a blank line closes the block. Code fences and tables are *not* affected (verified), so this is an HTML-block rule, not a general "after a block" rule. It bites hardest when a comment's last element is a `<details>` fold *and* some convention tells you to append something "at the very end, after the final punctuation" — AI-authorship sigils, footers, badges, shields. The two collide, the appended link dies silently, and a convention that says "one space before" is actively steering you into it.
 
 **Check the render, not the source** — round-trip a draft through GitHub's own renderer before posting:
 
