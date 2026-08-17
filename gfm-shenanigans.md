@@ -18,6 +18,17 @@
 | a **real ticket ref** to link | bare **`#123`** | `` `#123` `` (backticks kill the link) | you *want* the autolink |
 | a **commit SHA** | bare **`a1b2c3d`** (resolvable 7+/40-char SHA → autolinks, hover) | `` `a1b2c3d` `` (dead text) | backticks kill the useful link |
 | a ticket you must name but NOT link | escape **`\#6`** (renders "#6", no link) | bare `#6` | suppression fallback when prose won't do |
+| anything appended **after a `<details>` fold** | own paragraph, blank line after `</details>` | `</details> [x](url)` → the literal text `[x](url)` | the closing line of an HTML block is still *inside* it, so markdown there is never parsed |
+
+**Silent (no error, no warning — the link just becomes text):** markdown on the **closing line of an HTML block** is not parsed. This bites hardest when a comment's last element is a `<details>` fold *and* some convention tells you to append something "at the very end, after the final punctuation" — AI-authorship sigils, footers, badges, shields. The two rules collide and the appended link dies silently; a convention that says "one space before" is actively steering you into it. Blank line, own paragraph.
+
+**Check the render, not the source** — round-trip a draft through GitHub's own renderer before posting:
+
+```bash
+gh api /markdown --input <(jq -n --arg t "$BODY" '{text:$t,mode:"gfm"}')
+```
+
+An already-posted body is fixable in place (`PATCH`/`PUT` the comment or review, and say so in a changelog line) — but the check is free and the edit is not.
 
 **Cosmetic (visible, reversible — backtick the literal):** `<T>` / `Vector<int>` can be parsed as HTML and vanish · inside a table escape `|` as `\|` · at line start `1.` / `-` / `>` / 4-space → stray list/quote/code (ordered lists auto-renumber) · intraword `*` emphasizes (`a*b*c`), `_` usually doesn't · `:100:` → 💯 · single newline in an issue/PR/discussion comment → visible break (not in `.md` files).
 
