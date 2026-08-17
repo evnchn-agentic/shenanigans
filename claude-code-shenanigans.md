@@ -1,8 +1,13 @@
 # claude-code-shenanigans — the gates that halt your AGENT, not your disk
 
-Every other file here is about a tool destroying something. This one is the inverse failure:
-**the command never runs, an unattended agent stops dead at an approval prompt, and nobody is awake to
-click it.** The cost is a wasted night, not a wasted disk.
+Every other file here is about a tool destroying something. This one is the inverse failure: the harness
+interferes with your agent and your disk is never touched. It comes in two flavours.
+
+- **Loud (§0–§5): the command never runs.** An unattended agent stops dead at an approval prompt and nobody
+  is awake to click it. The cost is a wasted night.
+- **Quiet (§6): the instructions never arrive.** The harness silently drops most of a hook's payload, the
+  agent runs to completion on rules it never received, and nothing anywhere reports a problem. The cost is
+  every session after the one that broke it.
 
 > **This is a cooperation guide, not a bypass guide.** The goal is to write commands a static analyzer can
 > *prove* safe, and to not attempt genuinely destructive things unattended in the first place. Every "fix"
@@ -158,11 +163,70 @@ special-cased — **assume it does not help** rather than relying on it.
 6. **Headless/print mode ABORTS on a block**, where interactive merely pauses — worth knowing before you
    automate one.
 
-## 6. Provenance & how to re-derive
+## 6. The quiet one: a hook output over ~10 000 chars is truncated to 2 000, with no error
+
+Everything above halts loudly. This one does the opposite, and it is worse for exactly that reason.
+
+A hook returning `hookSpecificOutput.additionalContext` larger than **~10 000 chars** is written to a file,
+and **only its first 2 000 chars are injected**. The model sees a short note naming a path. There is no
+error, no warning, and nothing in the hook's own exit status changes — the hook "succeeded". An agent then
+runs the whole session on instructions it was never given, and behaves exactly like an agent ignoring them.
+
+**Why it ambushes you specifically when you add the second thing.** One payload under the limit works
+forever and teaches you the mechanism is sound. Add a second payload **to that same hook's output** and the
+concatenation crosses the limit, so the new one never lands **and the one that worked for months is now
+truncated too**. The regression presents as "the old feature broke when I added a new one", which is the
+wrong place to look. (Two *separate* hooks do not combine this way — see the fix below.)
+
+**The fix is to split, not to compress**: the limit applies **per hook output**, not to the merged context
+for that event. Sibling hooks on the same event arrive intact alongside a truncated one. So give each
+payload its own hook entry (a `--flag` on the same script is enough) and keep every single output under
+budget.
+
+**Cheap probe, no instrumentation:** if the harness persisted a hook output, it left the file behind. On the
+builds below, a `hook-*additionalContext*` file under a session's `tool-results/` means that hook output was
+persisted, i.e. truncated. **Absence is weaker evidence than presence** — zero files is consistent with
+"every hook fit" *and* with "the hook never ran", a changed path layout, or a different naming scheme on
+your build. Confirm the hooks actually fired before reading zero as all-clear.
+
+If you write hooks that grow with content you do not control (injecting a file, a doc, a ruleset), four
+habits keep this from ever being silent again:
+
+1. **Split** so each invocation is independently under budget.
+2. **Measure your own output** and prepend a loud `OVERSIZE` line when it would cross. The warning then
+   lands *inside* the surviving 2 000 chars, which is the only real estate you are guaranteed.
+3. **Check your own wiring.** If installing a payload takes two steps (a flag file *and* a settings entry),
+   have the script detect the half-installed state and say so. Half-installed is silently inert.
+4. **Make a malformed argument shout.** "Emits nothing" is indistinguishable from "correctly had nothing to
+   say", and a hook that emits nothing is invisible.
+
+**Confidence, honestly split.** The 2 000-char preview is a verbatim constant. The ~10 000 ceiling is an
+*inference*: the persistence path takes a `Math.min` of a per-caller size and a ceiling, and `1e4` is the
+only **discovered** candidate consistent with measurement — measurement brackets it, since a 6.8 KB output
+was never persisted across months of sessions while a 19.3 KB one was persisted on its first. That does not
+exclude a computed or aliased ceiling the grep below cannot see (several candidates are identifiers, not
+literals). So treat 10 000 as a **working number, not a proved constant**, and leave real headroom rather
+than tuning to it. Re-derive after any upgrade:
+
+```bash
+B=$(readlink -f ~/.local/bin/claude)
+strings -n 8 "$B" | /usr/bin/grep -o 'Output too large.\{0,120\}' | sort -u   # the persist message
+strings -n 8 "$B" | /usr/bin/grep -o 'maxResultSizeChars:.\{0,20\}' | sort -u  # candidate ceilings
+```
+
+Same mechanism governs oversized **tool results**, where it is far less silent — the model sees the note and
+can read the file, though it will still act on a truncated result if it doesn't. A hook is the sharp case
+because the note arrives with no agent watching for it.
+
+## 7. Provenance & how to re-derive
 
 Read out of the **running** binary (`readlink -f` your `claude` launcher → a bun-compiled Mach-O), build
 **2.1.223**, macOS/arm64, 2026-08. Every quoted reason string and `bashMissKind` identifier is verbatim from
 that build, not recalled.
+
+**§6 is a later, separately-sourced addition**: constants read from **2.1.224**, behaviour measured live on
+2.1.224, and both greps re-run against **2.1.226** with the same constants present. It is version-pinned the
+same way everything else here is — re-derive after an upgrade rather than trusting the number.
 
 ```bash
 B=$(readlink -f ~/.local/bin/claude)
