@@ -11,7 +11,7 @@ traps with the minimal fix.
 ## Why "shenanigans"?
 
 Because these aren't bugs in *your* code — they're the tool doing something surprising *around* your
-code. A markdown comment that spams a permanent backlink. A `move` that destroys a browser tab. A
+code. A markdown comment that spams a permanent backlink. A reply that lands under the wrong thread because an array index moved. A `move` that destroys a browser tab. A
 zsh loop that silently does nothing. A `pip install -e .` that exits 0 and installs nothing.
 
 Most of these fail *destructively*. One (`claude-code-shenanigans.md`) fails the opposite way — the
@@ -23,6 +23,7 @@ Same genus: the surprise is in the tool, not your code.
 | File | Read before… |
 |---|---|
 | [`gfm-shenanigans.md`](gfm-shenanigans.md) | writing any GitHub comment / PR / review / commit message |
+| [`github-api-shenanigans.md`](github-api-shenanigans.md) | any scripted GitHub mutation (`gh api`, GraphQL, Octokit) — replying, deleting, addressing objects by id |
 | [`git-shenanigans.md`](git-shenanigans.md) | any irreversible git op (branch -D, mass-delete, force-push, rebase) |
 | [`shell-shenanigans.md`](shell-shenanigans.md) | writing any shell loop, or a hardware/irreversible script (zsh or bash) |
 | [`python-shenanigans.md`](python-shenanigans.md) | writing or installing Python |
