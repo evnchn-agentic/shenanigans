@@ -32,6 +32,14 @@ Same genus: the surprise is in the tool, not your code.
 | [`macos-shenanigans.md`](macos-shenanigans.md) | any filename / path / asset check on a Mac that a Linux server will re-run |
 | [`claude-code-shenanigans.md`](claude-code-shenanigans.md) | letting an agent run **unattended** — the command shapes that halt it at an approval prompt |
 
+## Are these still true?
+
+`./verify/run.sh` re-runs the mechanically testable claims against your machine and reports which
+still reproduce. Each probe asserts both the trap *and* the documented cure, so a note that has
+quietly gone stale shows up as a failure rather than as convincing prose. See
+[`verify/README.md`](verify/README.md) — including the list of claims that are deliberately
+**not** probed, because checking them would cost the damage they warn about.
+
 ## Using these with an AI coding agent
 
 Point your agent's instructions (e.g. `CLAUDE.md`, `AGENTS.md`) at the relevant file: *"before writing

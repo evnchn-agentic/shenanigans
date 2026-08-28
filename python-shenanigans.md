@@ -16,13 +16,24 @@ python3 -m venv venv && source venv/bin/activate && pip install -r requirements.
 
 ## §2 — top-level `Pool()` / `Process()` / `Queue()` / native-GUI `run()` with NO `__main__` guard → bootstrap-recurse
 
-`fork` doesn't re-import the parent module; `spawn` and `forkserver` DO. **CPython 3.14 changed the
-POSIX default `fork` → `forkserver`**, so code that worked on 3.10–3.13 now infinite-recurses with:
+`fork` doesn't re-import the parent module; `spawn` and `forkserver` DO — and the default start
+method is **per-platform**:
+
+| platform | default | re-imports the parent module? |
+|---|---|---|
+| macOS | `spawn` (since 3.8) | **yes** — this has always bitten |
+| Linux | `fork` → **`forkserver` in CPython 3.14** | **yes**, newly, on 3.14+ |
+| Windows | `spawn` | **yes** |
+
+So the 3.14 change is the *Linux* one; a Mac has been in the trap for years. Either way the
+unguarded module re-imports itself and infinite-recurses with:
 ```
 RuntimeError: An attempt has been made to start a new process before
 the current process has finished its bootstrapping phase.
 ```
-Universal fix: wrap the entry point in `if __name__ == '__main__':`. Bites native-window GUI
+Check yours with `python3 -c 'import multiprocessing as m; print(m.get_start_method())'` — do not
+assume it from the Python version alone. Universal fix: wrap the entry point in
+`if __name__ == '__main__':`. Bites native-window GUI
 frameworks (e.g. NiceGUI `ui.run(native=True)`) at top level, any worker pool, anything
 multiprocessing outside `__main__`.
 

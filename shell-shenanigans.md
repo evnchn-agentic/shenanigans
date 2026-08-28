@@ -44,9 +44,18 @@ multi-word command in a scalar and running it unquoted fails:
 CMD="rsync -a -e 'ssh -o StrictHostKeyChecking=no' src/ host:/dst/"
 $CMD          # -> zsh: command not found: rsync -a -e ...  (the WHOLE string is ONE token)
 ```
-Symptoms: `command not found: <the whole string>` / `<first arg>` / `File name too long` (a giant
-single token handed to a tool). Tell: a loop that **"succeeds (exit 0) but does nothing"** — the 0
-came from a trailing `echo`.
+Symptoms: the **whole string** is reported back at you as if it were one command name — but the
+*wording* depends on whether that string contains a `/`, which is easy to grep past:
+
+```console
+$ zsh -c 'CMD="rsync -av --delete";        $CMD'
+zsh:1: command not found: rsync -av --delete
+$ zsh -c 'CMD="rsync -a src/ host:/dst/";  $CMD'
+zsh:1: no such file or directory: rsync -a src/ host:/dst/     # a slash makes it a PATH lookup
+```
+
+Also `File name too long` (a giant single token handed to a tool). Tell: a loop that
+**"succeeds (exit 0) but does nothing"** — the 0 came from a trailing `echo`.
 
 **Fixes (root-first):**
 - **Inline the full command every call** — most robust. Shell state doesn't persist between separate
