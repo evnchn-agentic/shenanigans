@@ -4,10 +4,16 @@
 #   multiprocessing without a __main__ guard now bootstrap-recurses.
 #
 # SAFETY: the no-guard arm IS a fork bomb (each child re-imports the module and
-# starts its own Pool, forever). GNU `timeout` puts it in its own process group
-# and signals the group, so the whole tree dies -- verified: 0 strays after.
+# starts its own Pool, forever). GNU `timeout` puts it in its own process group and
+# signals the group, so the whole tree dies. That is a claim, so the probe ASSERTS
+# it below rather than asserting it in a comment -- and refuses to run at all
+# without GNU coreutils `timeout`, whose group-kill is the thing being relied on.
 . "$(dirname "$0")/../lib.sh"
 need python3; need timeout
+timeout --version 2>/dev/null | grep -qi coreutils || {
+  echo "    skip: need GNU coreutils timeout (process-group kill) to bound the fork bomb"
+  exit $SKIPPED
+}
 probe_tmp; d=$PROBE_TMP
 
 expect "running on 3.14+" 'yes' \
@@ -49,6 +55,15 @@ if __name__ == '__main__':
     with Pool(2) as p:
         print(p.map(abs, [-1, -2]))
 PY
+# Enforce the safety claim in the header: nothing from that tree may survive.
+# $d is a fresh mktemp path, so this pattern cannot match anything else on the box.
+sleep 1
+strays=$(pgrep -f "$d" 2>/dev/null | wc -l | tr -d " ")
+if [ "$strays" -ne 0 ]; then
+  for s_pid in $(pgrep -f "$d"); do kill -9 "$s_pid" 2>/dev/null; done
+fi
+expect "timeout killed the whole process group (no strays)" '0' "$strays"
+
 expect "the __main__ guard fixes it" '[1, 2]' "$(cd "$d" && timeout 30 python3 good.py 2>&1 | tail -1)"
 
 # Under an explicit `fork` the same unguarded source is fine -> the guard is only

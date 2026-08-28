@@ -60,17 +60,23 @@ review** — you believe you reverted, and you did not.
 - `git config core.ignorecase false` in that repo — git then sees the rename as add+delete.
 - To undo it: **`rm` the wrongly-cased file, then `git checkout -- .`** This is the one that
   always works, because the path is genuinely absent when checkout runs.
-- **`git reset --hard` is NOT a reliable undo here**, despite looking like the obvious one. A
-  case-*only* rename leaves the index clean, so reset has nothing to write and the wrong spelling
-  survives. It restores the stored name only when the file's **content also differs** — then the
-  path is dirty, reset rewrites it, and the write lands back on the stored spelling:
+- **`git reset --hard` is NOT a reliable undo here**, despite looking like the obvious one. It
+  restores the stored spelling only when git already considers the path **dirty** — because then it
+  rewrites the file, and the write resolves back onto the stored name. A case-*only* rename is
+  **clean**, so there is nothing to rewrite and the wrong spelling survives. Content changes and
+  mode changes both count as dirty; the casing alone does not:
 
   ```console
   $ mv Logo.webp logo.webp && git reset --hard -q && ls *.webp
-  logo.webp                      # unchanged content -> reset did nothing
-  $ echo x >> logo.webp && git reset --hard -q && ls *.webp
-  Logo.webp                      # content differed -> reset rewrote it, correctly cased
+  logo.webp                      # clean -> reset did nothing
+  $ echo x >> logo.webp   && git reset --hard -q && ls *.webp
+  Logo.webp                      # content dirty -> rewritten, correctly cased
+  $ mv Logo.webp logo.webp && chmod +x logo.webp && git reset --hard -q && ls *.webp
+  Logo.webp                      # mode dirty -> same
   ```
+
+  Which is worse than a rule you can rely on either way: the *same command* silently does or does
+  not undo the rename depending on whether you also happened to touch the file.
 
   So "I reset --hard, so I'm back to HEAD" is exactly the false-clean belief this section warns
   about, one level up. (git 2.51.0, macOS 26.5.2.)

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # CLAIM  cpp-shenanigans.md §1
-#   A partial memcpy leaves an int indeterminate. At -O2 the optimizer can fold
-#   the read and print the "correct" value, so a green host build hides the bug;
-#   -O0 and -ftrivial-auto-var-init=pattern force it into the open.
+#   A partial memcpy leaves an int indeterminate, yet the program compiles without a
+#   diagnostic and prints the "correct" value -- so a green host run hides the bug.
+#   NOTE this probe observes the SYMPTOM, not the mechanism: it cannot prove *why*
+#   -O2 printed 8 (folding vs a zeroed stack slot). What it does establish is the
+#   operational point: neither -O2 nor -O0 surfaced it here, and pattern-init did.
 . "$(dirname "$0")/../lib.sh"
 need cc
 probe_tmp; d=$PROBE_TMP
@@ -26,7 +28,8 @@ expect "...and -Wall -Wextra says nothing about it" '' "$(grep -c uninitial "$d/
 
 o2=$(build -O2); o0=$(build -O0)
 note "-O2 printed $o2 ; -O0 printed $o0"
-expect "-O2 folds the read into the 'correct' 8" '8' "$o2"
+expect "-O2 prints the lucky 'correct' 8"     '8' "$o2"
+expect "...and so does -O0 here: it is NOT a detector" '8' "$o0"
 
 pat=$(cc -O0 -ftrivial-auto-var-init=pattern -o "$d/a.out" "$d/ub.c" 2>/dev/null && "$d/a.out")
 expect "-ftrivial-auto-var-init=pattern makes it deterministic garbage" 'yes' \

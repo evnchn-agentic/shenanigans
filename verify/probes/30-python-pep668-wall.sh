@@ -2,8 +2,9 @@
 # CLAIM  python-shenanigans.md §1
 #   A package-manager-managed Python refuses `pip install` outside a venv with
 #   "externally-managed-environment"; a venv is the cure.
-# Nothing is installed anywhere: the trap arm uses --dry-run, the cure arm
-# installs a wheel that ships with the venv itself.
+# Nothing is installed anywhere and nothing is downloaded: both arms are --dry-run,
+# and the venv arm is additionally --no-index, so it MUST fail. What is being tested
+# is WHICH failure -- PEP 668 refuses before resolving, a venv gets to the resolver.
 . "$(dirname "$0")/../lib.sh"
 need python3
 probe_tmp; d=$PROBE_TMP

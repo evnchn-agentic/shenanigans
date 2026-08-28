@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # CLAIM  macos-shenanigans.md §2
 #   With core.ignorecase=true, a case-only rename is invisible: status is clean,
-#   add -A stages nothing, `checkout --` is a no-op, but `reset --hard` DOES restore.
+#   add -A stages nothing, and `checkout --` is a no-op. `reset --hard` restores the
+#   stored casing only when the path is otherwise DIRTY (content or mode); on a pure
+#   case-only rename it does nothing, so it is not the reliable undo the file claimed.
 . "$(dirname "$0")/../lib.sh"
 need git
 probe_tmp; d=$PROBE_TMP
@@ -28,12 +30,18 @@ expect "checkout -- . is a no-op on disk"     'logo.webp'   "$(cd "$r" && ls *.w
 git -C "$r" reset --hard -q
 expect "reset --hard does NOT restore a case-only rename" 'logo.webp' "$(cd "$r" && ls *.webp)"
 
-# ...but if the CONTENT also differs, the path is dirty, reset rewrites it, and
-# the write lands back on the STORED spelling. That is the real rule.
+# ...but any dirtiness makes reset rewrite the path, and the write lands back on the
+# STORED spelling. Content and mode both count -- the mode arm was contributed by a
+# reviewer who refuted the first, content-only wording of this rule.
 printf 'changed\n' > "$r/logo.webp"
 expect "content churn makes the path visibly dirty" ' M Logo.webp' "$(git -C "$r" status --porcelain)"
 git -C "$r" reset --hard -q
 expect "reset --hard DOES restore it when content differs" 'Logo.webp' "$(cd "$r" && ls *.webp)"
+
+mv "$r/Logo.webp" "$r/logo.webp"; chmod +x "$r/logo.webp"
+expect "a MODE-only change is dirty too"           ' M Logo.webp' "$(git -C "$r" status --porcelain)"
+git -C "$r" reset --hard -q
+expect "reset --hard restores it on mode dirt too" 'Logo.webp'    "$(cd "$r" && ls *.webp)"
 
 # The cure that works unconditionally: remove the wrongly-cased file first.
 mv "$r/Logo.webp" "$r/logo.webp"
