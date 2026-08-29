@@ -18,11 +18,18 @@ jobs:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      # Without GNU timeout the multiprocessing probe skips, and the run goes green
+      # having never checked the spawn-runaway claim. Install it rather than let a
+      # blind pass look like a pass.
+      - name: GNU coreutils (macOS ships no timeout)
+        if: runner.os == 'macOS'
+        run: brew install coreutils
+
       - name: Record what we are testing against
         run: |
           uname -a
-          for t in bash zsh git rsync rg sed python3 cc docker; do
+          for t in bash zsh git rsync rg sed python3 cc docker timeout gtimeout; do
             printf '%-8s %s\n' "$t" "$(command -v $t || echo -)"
           done
           git --version; python3 -VV

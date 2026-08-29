@@ -32,6 +32,12 @@ the three corrections in this branch were found exactly that way.
 Exit codes: `0` holds · `1` drifted · `77` skipped (prerequisite missing, e.g. no docker, or a
 claim scoped to an OS you are not on).
 
+**A silent skip is a green run that checked nothing.** `31-python-mp-start-method` needs GNU
+`timeout` to bound its fork bomb — and stock macOS ships none, while Homebrew installs it as
+`gtimeout`. Looking only for `timeout` would have made the macOS CI leg skip the probe and pass,
+never checking the claim it exists to check. It takes either name, and the workflow installs
+coreutils. Probes are also kept parseable by **bash 3.2**, which is still `/bin/bash` on macOS.
+
 **A claim scoped to one OS must SKIP elsewhere, never fail.** Before this guard existed, a Linux run
 reported `DRIFTED` for macos §5 (BSD `sed -i`) and §6 (`/private` symlinks) — a red run that meant
 nothing, which is worse for a verifier than no run at all.

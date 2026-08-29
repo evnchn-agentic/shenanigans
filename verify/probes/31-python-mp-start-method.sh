@@ -10,11 +10,21 @@
 # it below rather than asserting it in a comment -- and refuses to run at all
 # without GNU coreutils `timeout`, whose group-kill is the thing being relied on.
 . "$(dirname "$0")/../lib.sh"
-need python3; need timeout
-timeout --version 2>/dev/null | grep -qi coreutils || {
-  echo "    skip: need GNU coreutils timeout (process-group kill) to bound the fork bomb"
+need python3
+# Stock macOS ships no `timeout` at all, and Homebrew's coreutils installs it as
+# `gtimeout` unless you opt into gnubin -- so hunting only for `timeout` makes this
+# probe SKIP on a Mac. A silent skip here is a green run that never checked the
+# claim, which is the exact failure this repo is about. Take either name, but
+# insist on GNU: the process-group kill is what bounds the fork bomb.
+TIMEOUT=""
+for c in timeout gtimeout; do
+  command -v "$c" >/dev/null 2>&1 && "$c" --version 2>/dev/null | grep -qi coreutils && { TIMEOUT=$c; break; }
+done
+[ -n "$TIMEOUT" ] || {
+  echo "    skip: need GNU coreutils timeout/gtimeout (process-group kill) to bound the fork bomb"
   exit $SKIPPED
 }
+note "bounding the fork bomb with $(command -v "$TIMEOUT")"
 probe_tmp; d=$PROBE_TMP
 
 os=$(uname -s)
@@ -36,7 +46,12 @@ expect "$os / python $ver defaults to the documented method" "$want" "$method"
 # version, not one lucky interpreter.
 for v in 3.11 3.12 3.13 3.14; do
   b=$(command -v "python$v" || true); [ -z "$b" ] && continue
-  w=$(case "$os:$v" in Darwin:*) echo spawn;; Linux:3.14) echo forkserver;; Linux:*) echo fork;; esac)
+  # NOT `w=$(case ... esac)`: bash 3.2 -- which is what /bin/bash still is on macOS,
+  # including GitHub's runners -- fails to parse a `case` inside a command
+  # substitution. Found by running this probe under a stock-Mac PATH.
+  if [ "$os" = Darwin ]; then w=spawn
+  elif [ "$v" = 3.14 ];  then w=forkserver
+  else                        w=fork; fi
   expect "  python$v on $os -> $w" "$w" "$("$b" -c 'import multiprocessing as m;print(m.get_start_method())')"
 done
 
@@ -45,7 +60,7 @@ from multiprocessing import Pool
 with Pool(2) as p:
     print(p.map(abs, [-1, -2]))
 PY
-( cd "$d" && timeout -k 2 6 python3 bad.py ) > "$d/bad.out" 2>&1 || true
+( cd "$d" && "$TIMEOUT" -k 2 6 python3 bad.py ) > "$d/bad.out" 2>&1 || true
 # Grep a SHORT fragment: Python wraps the RuntimeError text across lines, so the
 # full sentence matches nothing and the sweep silently reports zero.
 hits=$(grep -ac "bootstrapping phase" "$d/bad.out" || true)
@@ -82,5 +97,5 @@ if __name__ == '__main__':
     with Pool(2) as p:
         print(p.map(abs, [-1, -2]))
 PY
-expect "the __main__ guard works everywhere" '[1, 2]' "$(cd "$d" && timeout 30 python3 good.py 2>&1 | tail -1)"
+expect "the __main__ guard works everywhere" '[1, 2]' "$(cd "$d" && "$TIMEOUT" 30 python3 good.py 2>&1 | tail -1)"
 verdict
