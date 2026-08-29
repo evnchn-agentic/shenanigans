@@ -4,6 +4,7 @@
 #   iterdir() returns the bytes as stored, so a listing compare reproduces the
 #   Linux-only bug locally.
 . "$(dirname "$0")/../lib.sh"
+need_macos
 need python3
 probe_tmp; d=$PROBE_TMP
 need_case_insensitive_fs "$d"

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # CLAIM  python-shenanigans.md §2
-#   "CPython 3.14 changed the POSIX default fork -> forkserver", so top-level
-#   multiprocessing without a __main__ guard now bootstrap-recurses.
+#   The default multiprocessing start method is PER-PLATFORM -- macOS spawn,
+#   Linux fork until CPython 3.14 then forkserver -- and any method that
+#   re-imports the parent module bootstrap-recurses without a __main__ guard.
 #
 # SAFETY: the no-guard arm IS a fork bomb (each child re-imports the module and
 # starts its own Pool, forever). GNU `timeout` puts it in its own process group and
@@ -16,24 +17,27 @@ timeout --version 2>/dev/null | grep -qi coreutils || {
 }
 probe_tmp; d=$PROBE_TMP
 
-expect "running on 3.14+" 'yes' \
-  "$(python3 -c 'import sys;print("yes" if sys.version_info[:2]>=(3,14) else "no")')"
+os=$(uname -s)
+ver=$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')
+new=$(python3 -c 'import sys;print("yes" if sys.version_info[:2]>=(3,14) else "no")')
+method=$(python3 -c 'import multiprocessing as m;print(m.get_start_method())')
 
-# DRIFT (2026-08-29, CPython 3.14.6 on macOS 26): the default here is `spawn`,
-# not `forkserver`. The forkserver flip is a *Linux* change; macOS is POSIX too
-# and has defaulted to spawn since 3.8. The consequence below is the same either
-# way -- both spawn and forkserver re-import the parent module -- but the stated
-# mechanism does not hold on a Mac.
-expect "default start method on this POSIX box" 'spawn' \
-  "$(python3 -c 'import multiprocessing as m;print(m.get_start_method())')"
-expect "...and it is NOT forkserver" 'no' \
-  "$(python3 -c 'import multiprocessing as m;print("yes" if m.get_start_method()=="forkserver" else "no")')"
+# The table in the .md, as an assertion. The point of §2 is that you cannot read
+# the default off the Python version alone -- so neither does this probe.
+case "$os:$new" in
+  Darwin:*)  want=spawn      ;;   # macOS: spawn since 3.8, the 3.14 flip is not its story
+  Linux:yes) want=forkserver ;;   # the CPython 3.14 change
+  Linux:no)  want=fork       ;;
+  *)         echo "    skip: no documented expectation for $os"; exit $SKIPPED ;;
+esac
+expect "$os / python $ver defaults to the documented method" "$want" "$method"
 
-# Corroborate that this is not new on a Mac: check every other CPython on PATH.
-for v in 3.11 3.12 3.13; do
-  b=$(command -v "python$v" || true)
-  [ -n "$b" ] && expect "python$v on this Mac also defaults to spawn" 'spawn' \
-    "$("$b" -c 'import multiprocessing as m;print(m.get_start_method())')"
+# Corroborate across every other CPython on PATH: the default tracks platform and
+# version, not one lucky interpreter.
+for v in 3.11 3.12 3.13 3.14; do
+  b=$(command -v "python$v" || true); [ -z "$b" ] && continue
+  w=$(case "$os:$v" in Darwin:*) echo spawn;; Linux:3.14) echo forkserver;; Linux:*) echo fork;; esac)
+  expect "  python$v on $os -> $w" "$w" "$("$b" -c 'import multiprocessing as m;print(m.get_start_method())')"
 done
 
 cat > "$d/bad.py" <<'PY'
@@ -45,9 +49,32 @@ PY
 # Grep a SHORT fragment: Python wraps the RuntimeError text across lines, so the
 # full sentence matches nothing and the sweep silently reports zero.
 hits=$(grep -ac "bootstrapping phase" "$d/bad.out" || true)
-expect "no __main__ guard -> the documented RuntimeError" 'yes' "$([ "$hits" -ge 1 ] && echo yes || echo no)"
-expect "...and it recurses, rather than erroring once" 'yes' "$([ "$hits" -ge 5 ] && echo yes || echo no)"
-note "the 6s run emitted the RuntimeError $hits times"
+
+if [ "$method" = fork ]; then
+  # fork does NOT re-import the parent, so the unguarded module is fine. This is
+  # the arm that shows the guard is needed BECAUSE of the start method.
+  expect "fork does not re-import -> no guard needed" '[1, 2]' "$(tail -1 "$d/bad.out")"
+  expect "...and no bootstrap error at all"           '0'      "$hits"
+else
+  expect "$method re-imports -> the documented RuntimeError" 'yes' "$([ "$hits" -ge 1 ] && echo yes || echo no)"
+  # The blast radius differs by method, and only one of them is a runaway:
+  # spawn re-execs a fresh interpreter per child, each of which re-imports and
+  # spawns more; forkserver imports once in a single server process that then
+  # dies. Measured 266 vs a stable 1 in 6 seconds.
+  if [ "$method" = spawn ]; then
+    expect "spawn RUNS AWAY (many errors, not one)"  'yes' "$([ "$hits" -ge 5 ] && echo yes || echo no)"
+  else
+    expect "forkserver is BOUNDED (a handful, not a storm)" 'yes' "$([ "$hits" -lt 5 ] && echo yes || echo no)"
+  fi
+  note "$method: the 6s run emitted the RuntimeError $hits times"
+fi
+
+# Enforce the safety claim in the header: nothing from that tree may survive.
+# $d is a fresh mktemp path, so this pattern cannot match anything else on the box.
+sleep 1
+strays=$(pgrep -f "$d" 2>/dev/null | wc -l | tr -d " ")
+[ "$strays" -ne 0 ] && for s_pid in $(pgrep -f "$d"); do kill -9 "$s_pid" 2>/dev/null; done
+expect "timeout killed the whole process group (no strays)" '0' "$strays"
 
 cat > "$d/good.py" <<'PY'
 from multiprocessing import Pool
@@ -55,25 +82,5 @@ if __name__ == '__main__':
     with Pool(2) as p:
         print(p.map(abs, [-1, -2]))
 PY
-# Enforce the safety claim in the header: nothing from that tree may survive.
-# $d is a fresh mktemp path, so this pattern cannot match anything else on the box.
-sleep 1
-strays=$(pgrep -f "$d" 2>/dev/null | wc -l | tr -d " ")
-if [ "$strays" -ne 0 ]; then
-  for s_pid in $(pgrep -f "$d"); do kill -9 "$s_pid" 2>/dev/null; done
-fi
-expect "timeout killed the whole process group (no strays)" '0' "$strays"
-
-expect "the __main__ guard fixes it" '[1, 2]' "$(cd "$d" && timeout 30 python3 good.py 2>&1 | tail -1)"
-
-# Under an explicit `fork` the same unguarded source is fine -> the guard is only
-# needed because the default re-imports.
-cat > "$d/forked.py" <<'PY'
-import multiprocessing as m
-m.set_start_method('fork', force=True)
-with m.Pool(2) as p:
-    print(p.map(abs, [-1, -2]))
-PY
-expect "explicit fork start method is unaffected" '[1, 2]' \
-  "$(cd "$d" && timeout 30 python3 -W ignore forked.py 2>/dev/null | tail -1)"
+expect "the __main__ guard works everywhere" '[1, 2]' "$(cd "$d" && timeout 30 python3 good.py 2>&1 | tail -1)"
 verdict

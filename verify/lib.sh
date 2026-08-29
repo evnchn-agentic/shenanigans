@@ -35,6 +35,15 @@ need() {
   command -v "$1" >/dev/null 2>&1 || { printf '    skip: %s not installed\n' "$1"; exit $SKIPPED; }
 }
 
+# A claim scoped to one OS must SKIP elsewhere, never fail. Without this a Linux
+# runner reports DRIFTED for macos §5 and §6 -- a red run that means nothing, which
+# is worse for a verifier than no run at all.
+need_macos() {
+  [ "$(uname -s)" = Darwin ] && return 0
+  printf '    skip: this claim is scoped to macOS (running on %s)\n' "$(uname -s)"
+  exit $SKIPPED
+}
+
 # Refuse to run case-sensitivity probes on a case-sensitive volume.
 need_case_insensitive_fs() {
   local d=$1

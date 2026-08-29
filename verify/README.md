@@ -30,7 +30,18 @@ Probes take the world as ground truth. When a probe and a note disagree, the not
 the three corrections in this branch were found exactly that way.
 
 Exit codes: `0` holds · `1` drifted · `77` skipped (prerequisite missing, e.g. no docker, or a
-case-sensitive volume for a claim scoped to the stock Mac default).
+claim scoped to an OS you are not on).
+
+**A claim scoped to one OS must SKIP elsewhere, never fail.** Before this guard existed, a Linux run
+reported `DRIFTED` for macos §5 (BSD `sed -i`) and §6 (`/private` symlinks) — a red run that meant
+nothing, which is worse for a verifier than no run at all.
+
+## When this actually runs
+
+These claims go stale because the **world** changes — a new git, a new CPython, a new macOS — not
+because the repo changes. So `.github/workflows/verify.yml` runs weekly on a schedule across
+`macos-latest` and `ubuntu-latest`, and on a pull request only when `verify/` itself is touched.
+A per-commit gate would be the wrong instrument for this failure mode.
 
 ## Coverage
 
@@ -48,7 +59,7 @@ case-sensitive volume for a claim scoped to the stock Mac default).
 | `24-macos-colliding-names-checkout` | macos §3 | `F.txt` + `f.txt`, permanently dirty |
 | `25-macos-docker-bindmount-leak` | macos §4 | bind mount leaks case-insensitivity |
 | `30-python-pep668-wall` | python §1 | externally-managed-environment; venv clears it |
-| `31-python-mp-start-method` | python §2 | start method + the bootstrap recursion |
+| `31-python-mp-start-method` | python §2 | the whole per-platform table + the bootstrap recursion; portable |
 | `40-cpp-uninitialized-read` | cpp §1 | symptom only: `-O2` *and* `-O0` print the lucky value; pattern-init exposes it |
 
 ## What is deliberately NOT probed
@@ -79,5 +90,8 @@ macOS 26.5.2 (arm64) · bash 5.3.15 · zsh 5.9 · git 2.51.0 · rsync 3.4.4 · r
 Python 3.14.6 (Homebrew) · Apple clang 21.0.0 · Docker 29.4.0 — **14 held, 0 drifted, 0 skipped**,
 after the corrections in this branch. Before them: 11 held, 3 drifted.
 
-Probes skip rather than fail when a prerequisite is absent, so a run on a Linux box or without a
-docker daemon reports fewer than 14 held. That is the honest answer, not a pass.
+Also green on Linux: `python:3.14-slim` (**4 held, 0 drifted, 10 skipped**) and `python:3.13-slim`,
+which is where the `forkserver` half of the python §2 table was measured.
+
+Probes skip rather than fail when a prerequisite is absent, so a Linux run reports far fewer than 14
+held. That is the honest answer, not a pass — and it is why the schedule runs both platforms.

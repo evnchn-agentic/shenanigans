@@ -3,6 +3,7 @@
 #   BSD sed -i takes a MANDATORY suffix; `sed -i -e` works but litters file-e;
 #   `sed -i ''` is the correct form.
 . "$(dirname "$0")/../lib.sh"
+need_macos
 probe_tmp; d=$PROBE_TMP
 
 printf 'a\n' > "$d/s.txt"

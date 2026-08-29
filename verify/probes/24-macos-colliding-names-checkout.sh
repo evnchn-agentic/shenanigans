@@ -4,6 +4,7 @@
 #   case-insensitive Mac: one survives, the twin is permanently `modified`, and
 #   checkout / stash / reset --hard will not clear it.
 . "$(dirname "$0")/../lib.sh"
+need_macos
 need git
 probe_tmp; d=$PROBE_TMP
 need_case_insensitive_fs "$d"

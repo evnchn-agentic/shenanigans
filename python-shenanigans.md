@@ -26,11 +26,17 @@ method is **per-platform**:
 | Windows | `spawn` | **yes** |
 
 So the 3.14 change is the *Linux* one; a Mac has been in the trap for years. Either way the
-unguarded module re-imports itself and infinite-recurses with:
+unguarded module re-imports itself and raises:
 ```
 RuntimeError: An attempt has been made to start a new process before
 the current process has finished its bootstrapping phase.
 ```
+The **blast radius** differs, though, and only one of them runs away: `spawn` re-execs a fresh
+interpreter per child, each of which re-imports and spawns more (measured: 266 of that traceback in
+6 seconds on macOS), while `forkserver` imports once in a single server process that then dies
+(a stable 1). So the 3.14 Linux change makes this failure *louder*, not unbounded — the runaway is
+the macOS/Windows shape.
+
 Check yours with `python3 -c 'import multiprocessing as m; print(m.get_start_method())'` — do not
 assume it from the Python version alone. Universal fix: wrap the entry point in
 `if __name__ == '__main__':`. Bites native-window GUI

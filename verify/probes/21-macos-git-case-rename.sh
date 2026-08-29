@@ -5,6 +5,7 @@
 #   stored casing only when the path is otherwise DIRTY (content or mode); on a pure
 #   case-only rename it does nothing, so it is not the reliable undo the file claimed.
 . "$(dirname "$0")/../lib.sh"
+need_macos
 need git
 probe_tmp; d=$PROBE_TMP
 need_case_insensitive_fs "$d"

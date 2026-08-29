@@ -4,6 +4,7 @@
 #   "just run it in a container" is not a valid case check; copying onto the
 #   container's own filesystem is.
 . "$(dirname "$0")/../lib.sh"
+need_macos
 need docker
 docker info >/dev/null 2>&1 || { echo "    skip: docker daemon not reachable"; exit $SKIPPED; }
 probe_tmp; d=$PROBE_TMP
