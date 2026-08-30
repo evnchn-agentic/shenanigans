@@ -6,10 +6,10 @@
 > ### ⚠️ SCOPE — most of this is shell-AGNOSTIC; only §1 & §3 are ZSH-specific
 > - **ALWAYS apply, any shell:** §0 (hardware atomic/self-disarm — catastrophic-tier), §2 (SSH
 >   quoting), §4 (rsync exclude anchoring), §5 (sed/perl self-match), §6 (`pkill -f` vs argv),
->   §7 (`rg -r`), §8 (`&` on a `cd &&` chain).
+>   §7 (`rg -r`), §8 (background job holds `$( )`'s pipe — bites bash first, but all of them).
 > - **ZSH-ONLY:** §1 & §3 (`$VAR` no word-split). Under **bash** the behaviour is the OPPOSITE
 >   (`$VAR` DOES split → **quote it**), so that advice is wrong-for-bash and must not fire there.
-> - **BASH-ONLY:** §9 (bash *version* drift — 3.2 and 5.x do not parse the same grammar).
+> - **BASH-ONLY:** §9 (bash *version* drift — 3.2's `$( )` parser is not 5.x's).
 > - **Which shell am I in?** Run `echo "${ZSH_VERSION:+ZSH}${BASH_VERSION:+BASH}"`. Don't trust the
 >   terminal's advertised login shell — the shell your tool/automation actually runs commands in can
 >   differ, and so can its **version** (§9).
@@ -146,34 +146,44 @@ functions a project used; the real calls were `mermaid.initialize()` / `mermaid.
   rather than by the corpus. Sanity-check any search whose result would change a conclusion — grep
   for a string you *know* is present and confirm it comes back verbatim.
 
-## §8 — `&` backgrounds the whole `cd && cmd` chain, and that subshell holds `$( )`'s pipe open
+## §8 — a background job inside `$( )` inherits the substitution's pipe, so `$( )` never returns
 
 ```console
 $ pid=$( cd /some/dir && nohup ./svc.sh >/dev/null 2>&1 & echo $! )
-# blocks for the SERVICE'S whole lifetime, printing nothing — not even the echo
+# under bash: blocks for the SERVICE'S whole lifetime, printing nothing — not even the echo
 ```
 
-Two surprises stacked, and you need both to explain it:
+`$( )` reads its child's stdout until the pipe closes. A backgrounded job keeps that pipe open for
+as long as it runs, and the `>/dev/null 2>&1` above is attached to `./svc.sh` — not to the subshell
+holding the pipe. So the substitution waits for a daemon you deliberately detached.
 
-1. `&` binds the **entire `cd && nohup` chain**, so what gets backgrounded is a subshell, not the
-   service alone.
-2. That subshell inherits the command substitution's stdout pipe, and `$( )` reads until the pipe
-   closes — which is when the *service* exits. The `>/dev/null 2>&1` you wrote covers the service's
-   own fds, not the subshell's.
+**Two shell-dependent details decide whether you actually get bitten, and neither is the rule:**
 
-The symptom is the worst kind: **zero output, indefinite hang**. That reads as a broken script or a
-hung service, not as a shell subtlety, and it cost two wrong diagnoses before the cause was found.
+- **What `&` binds.** bash, dash and ksh background the *entire* `cd && nohup …` list; zsh
+  backgrounds only the last command and runs `cd` in your current shell. Tell:
+  `sh -c 'cd /tmp && sleep 0 & wait; pwd'` prints your old cwd on the first three, `/tmp` on zsh.
+- **Whether the shell tail-execs.** dash and ksh replace the background subshell with the final
+  command, which carries its own redirections — so the pipe closes and the line *appears* to work.
+  bash forks and waits, so it hangs. Add any trailing command and the escape hatch is gone:
+  `pid=$( { ./svc.sh >/dev/null 2>&1; :; } & echo $! )` hangs in **bash, dash and zsh alike**.
 
-**Cure — redirect all three fds on the backgrounded subshell itself:**
+So "it works in my `sh` script" is not evidence — it is one shell's optimization, and moving the same
+line into bash, or appending one statement to it, brings the hang back. Symptom is the worst kind:
+**zero output, indefinite hang**, which reads as a broken service rather than a shell subtlety.
+
+**Cure — put the redirection on the backgrounded group, not on the command inside it:**
 
 ```console
 $ pid=$( ( cd /some/dir && exec ./svc.sh ) >/dev/null 2>&1 </dev/null & echo $! )   # returns at once
 ```
-- Or sidestep the substitution: have the launcher write the PID to a **file** and read the file.
-- Measured with a `sleep 20` stand-in service: the first form hits a 5 s `timeout` (`rc=124`, no
-  output at all); the cure returns `rc=0` and the PID immediately. bash 5.3 and `/bin/bash` 3.2.
+- **Only the group's stdout is load-bearing** — `>/dev/null` alone on the parens fixes the hang.
+  `2>&1` is noise suppression, `</dev/null` is daemon hygiene, `exec` saves a process. Keep them for
+  a daemon; know that none of them is what unblocks the substitution.
+- Or sidestep it: have the launcher write the PID to a **file** and read the file afterwards.
+- Measured with a `sleep` stand-in: the naive form hits a 2 s `timeout` (`rc=124`, no output at all)
+  under bash; the cure returns `rc=0` and the PID immediately.
 
-## §9 — `#!/usr/bin/env bash` is a *version* lottery: `case` inside `$( )` is a syntax error on 3.2
+## §9 — bash 3.2's `$( )` parser ends the substitution at a bare `pattern)` — so `case` breaks on CI
 
 ```console
 $ /opt/homebrew/bin/bash -c 'x=$(case a in a) echo one;; *) echo two;; esac); echo $x'
@@ -182,14 +192,26 @@ $ /bin/bash -c 'x=$(case a in a) echo one;; *) echo two;; esac); echo $x'
 /bin/bash: -c: line 0: syntax error near unexpected token `;;'
 ```
 
-`/bin/bash` on macOS is **3.2.57** — Apple froze it at the last GPLv2 release — and that is also what
-GitHub's macOS runners ship. `#!/usr/bin/env bash` takes whichever bash is first on `PATH`, so a
-script written and tested under Homebrew's 5.x parses fine on your machine and dies on CI, or on a
-colleague's Mac that never installed a newer bash.
+`/bin/bash` on macOS is **3.2.57** — Apple froze it at the last GPLv2 release — and that is what
+GitHub's `macos-15-arm64` runner image ships too (`Bash 3.2.57(1)-release`). `#!/usr/bin/env bash`
+takes whichever bash is first on `PATH`, so a script written under Homebrew's 5.x parses fine on your
+machine and dies on CI, or on a colleague's Mac that never installed a newer bash.
 
-This is the scope box's *"don't trust the advertised shell"* one level down: not **which** shell, but
-**which version** of it. The failure is loud — and loud somewhere you are not standing.
-- **Cure: use `if`/`elif`** wherever a `case` would sit inside a command substitution.
+**The boundary is narrower than "no `case` in `$( )`"** — 3.2 counts the unbalanced `)` of a *bare*
+case pattern as the end of the substitution. Three things that all work on 3.2:
+
+```console
+$ /bin/bash -c 'x=$(case ab in (a|ab) echo one;; (*) echo two;; esac); echo $x'   # parenthesized
+one
+$ /bin/bash -c 'x=`case a in a) echo one;; *) echo two;; esac`; echo $x'          # backticks
+one
+$ /bin/bash -c 'case a in a) echo one;; *) echo two;; esac'                       # not nested
+one
+```
+
+- **Cure: parenthesize the patterns** — `(a|ab)` instead of `a|ab)` — or use `if`/`elif`, which
+  sidesteps the ambiguity entirely.
 - **Guard the whole tree cheaply:** `/bin/bash -n script.sh` per file — parse-only, runs nothing, so
   it is safe to loop over a directory in CI or a pre-commit hook. Parse with the *oldest* bash you
-  ship to, not the newest you develop on.
+  ship to, not the newest you develop on. This is the scope box's *"don't trust the advertised
+  shell"* one level down: not **which** shell, but **which version** of it.
