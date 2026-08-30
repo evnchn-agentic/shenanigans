@@ -38,7 +38,11 @@ const uint8_t x = src[0];     // or value-initialize:  int x{};  /  int x = 0;
 
 **Force a UB bug to reveal itself — do not trust the default build:**
 
-- build the repro at **`-O0`** — the optimizer is far less likely to fold the bad read away;
+- build the repro at **`-O0`** — the optimizer is far less likely to fold the bad read away, but
+  **`-O0` alone is not a reliable detector**: it only shows you whatever the stack slot happened to
+  hold, which can be the lucky value. (Apple clang 21, macOS/arm64: the memcpy repro above prints a
+  clean `8` at `-O0` *and* at `-O2`; only pattern-init below surfaced it.) Treat `-O0` as one more
+  sample, not as proof;
 - **`-ftrivial-auto-var-init=pattern`** (Clang & GCC ≥12) fills uninitialized locals with a fixed
   pattern so "sometimes garbage" becomes *deterministic* garbage you can see — but the **pattern byte
   differs by compiler**: Clang uses `0xAA` (the `int x` above then reads `0xAAAAAA08`, not a lucky

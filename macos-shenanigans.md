@@ -58,8 +58,28 @@ review** — you believe you reverted, and you did not.
 **Cures**, in order of preference:
 - `git mv old new` — handles case-only renames correctly even without `-f`.
 - `git config core.ignorecase false` in that repo — git then sees the rename as add+delete.
-- `git reset --hard` *does* restore the on-disk name (unlike `checkout --`), so it is the
-  reliable undo. To restore one path, `rm` the wrongly-cased file first, then `git checkout --`.
+- To undo it: **`rm` the wrongly-cased file, then `git checkout -- .`** This is the one that
+  always works, because the path is genuinely absent when checkout runs.
+- **`git reset --hard` is NOT a reliable undo here**, despite looking like the obvious one. It
+  restores the stored spelling only when git already considers the path **dirty** — because then it
+  rewrites the file, and the write resolves back onto the stored name. A case-*only* rename is
+  **clean**, so there is nothing to rewrite and the wrong spelling survives. Content changes and
+  mode changes both count as dirty; the casing alone does not:
+
+  ```console
+  $ mv Logo.webp logo.webp && git reset --hard -q && ls *.webp
+  logo.webp                      # clean -> reset did nothing
+  $ echo x >> logo.webp   && git reset --hard -q && ls *.webp
+  Logo.webp                      # content dirty -> rewritten, correctly cased
+  $ mv Logo.webp logo.webp && chmod +x logo.webp && git reset --hard -q && ls *.webp
+  Logo.webp                      # mode dirty -> same
+  ```
+
+  Which is worse than a rule you can rely on either way: the *same command* silently does or does
+  not undo the rename depending on whether you also happened to touch the file.
+
+  So "I reset --hard, so I'm back to HEAD" is exactly the false-clean belief this section warns
+  about, one level up. (git 2.51.0, macOS 26.5.2.)
 
 ## §3 — a repo that legitimately contains `F.txt` **and** `f.txt` cannot be checked out on macOS
 
