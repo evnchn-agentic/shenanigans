@@ -5,11 +5,14 @@
 
 > ### ⚠️ SCOPE — most of this is shell-AGNOSTIC; only §1 & §3 are ZSH-specific
 > - **ALWAYS apply, any shell:** §0 (hardware atomic/self-disarm — catastrophic-tier), §2 (SSH
->   quoting), §4 (rsync exclude anchoring), §5 (sed/perl self-match).
+>   quoting), §4 (rsync exclude anchoring), §5 (sed/perl self-match), §6 (`pkill -f` vs argv),
+>   §7 (`rg -r`), §8 (`&` on a `cd &&` chain).
 > - **ZSH-ONLY:** §1 & §3 (`$VAR` no word-split). Under **bash** the behaviour is the OPPOSITE
 >   (`$VAR` DOES split → **quote it**), so that advice is wrong-for-bash and must not fire there.
+> - **BASH-ONLY:** §9 (bash *version* drift — 3.2 and 5.x do not parse the same grammar).
 > - **Which shell am I in?** Run `echo "${ZSH_VERSION:+ZSH}${BASH_VERSION:+BASH}"`. Don't trust the
->   terminal's advertised login shell — the shell your tool/automation actually runs commands in can differ.
+>   terminal's advertised login shell — the shell your tool/automation actually runs commands in can
+>   differ, and so can its **version** (§9).
 
 ## §0 — Irreversible / hardware scripts must be ATOMIC and SELF-DISARMING (highest stakes)
 
@@ -142,3 +145,51 @@ functions a project used; the real calls were `mermaid.initialize()` / `mermaid.
 - Same family as a sweep returning **all zeros**: output shaped like data, produced by a wrong flag
   rather than by the corpus. Sanity-check any search whose result would change a conclusion — grep
   for a string you *know* is present and confirm it comes back verbatim.
+
+## §8 — `&` backgrounds the whole `cd && cmd` chain, and that subshell holds `$( )`'s pipe open
+
+```console
+$ pid=$( cd /some/dir && nohup ./svc.sh >/dev/null 2>&1 & echo $! )
+# blocks for the SERVICE'S whole lifetime, printing nothing — not even the echo
+```
+
+Two surprises stacked, and you need both to explain it:
+
+1. `&` binds the **entire `cd && nohup` chain**, so what gets backgrounded is a subshell, not the
+   service alone.
+2. That subshell inherits the command substitution's stdout pipe, and `$( )` reads until the pipe
+   closes — which is when the *service* exits. The `>/dev/null 2>&1` you wrote covers the service's
+   own fds, not the subshell's.
+
+The symptom is the worst kind: **zero output, indefinite hang**. That reads as a broken script or a
+hung service, not as a shell subtlety, and it cost two wrong diagnoses before the cause was found.
+
+**Cure — redirect all three fds on the backgrounded subshell itself:**
+
+```console
+$ pid=$( ( cd /some/dir && exec ./svc.sh ) >/dev/null 2>&1 </dev/null & echo $! )   # returns at once
+```
+- Or sidestep the substitution: have the launcher write the PID to a **file** and read the file.
+- Measured with a `sleep 20` stand-in service: the first form hits a 5 s `timeout` (`rc=124`, no
+  output at all); the cure returns `rc=0` and the PID immediately. bash 5.3 and `/bin/bash` 3.2.
+
+## §9 — `#!/usr/bin/env bash` is a *version* lottery: `case` inside `$( )` is a syntax error on 3.2
+
+```console
+$ /opt/homebrew/bin/bash -c 'x=$(case a in a) echo one;; *) echo two;; esac); echo $x'
+one
+$ /bin/bash -c 'x=$(case a in a) echo one;; *) echo two;; esac); echo $x'
+/bin/bash: -c: line 0: syntax error near unexpected token `;;'
+```
+
+`/bin/bash` on macOS is **3.2.57** — Apple froze it at the last GPLv2 release — and that is also what
+GitHub's macOS runners ship. `#!/usr/bin/env bash` takes whichever bash is first on `PATH`, so a
+script written and tested under Homebrew's 5.x parses fine on your machine and dies on CI, or on a
+colleague's Mac that never installed a newer bash.
+
+This is the scope box's *"don't trust the advertised shell"* one level down: not **which** shell, but
+**which version** of it. The failure is loud — and loud somewhere you are not standing.
+- **Cure: use `if`/`elif`** wherever a `case` would sit inside a command substitution.
+- **Guard the whole tree cheaply:** `/bin/bash -n script.sh` per file — parse-only, runs nothing, so
+  it is safe to loop over a directory in CI or a pre-commit hook. Parse with the *oldest* bash you
+  ship to, not the newest you develop on.
