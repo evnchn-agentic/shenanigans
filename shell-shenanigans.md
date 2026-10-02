@@ -250,3 +250,49 @@ Rules:
 - Same family as **python-shenanigans §5** (`2>/dev/null` turning a parse error into an empty status)
   and **§4** ("exited 0 / printed nothing" is not "it worked"): *empty output is not a valid value
   unless you have positively established it is.*
+
+## §11 — a supervisor that watches for a *name* goes blind when the name changes (and a rejected call is not a null result)
+
+Two failures that look unrelated but are the same disease: **the instrument cannot see its own error,
+so it reports a confident but meaningless status.**
+
+**(a) Stale process pattern.** A watchdog guarding `ci_experiment2.sh` was left un-updated when the job
+became `ci_experiment3.sh`. `pgrep -f 'ci_experiment2.sh'` correctly found nothing → the supervisor
+loudly announced "experiment process is GONE" while the experiment was **running fine**. The alarm was
+real, the subject was wrong. *A watchdog keyed on a literal name is a watchdog that silently retires
+itself the moment the thing is renamed.*
+
+```bash
+# ✗ hardcoded: rots the instant the target is renamed
+pgrep -f 'ci_experiment2.sh'
+# ✓ parameterised: the pattern travels with the thing being watched
+pgrep -f "${EXP_PATTERN:-ci_experiment3.sh}"
+```
+
+**(b) A 4xx/error is not "nothing matched".** The experiment triggered pipelines with
+`POST /pipeline?ref=refs/merge-requests/<iid>/merge`; GitLab answered `400 insufficient permission`.
+The code took the empty response, saw "no new pipeline id", and logged the benign
+`!9929: no new pipeline` — **four rounds of calm, plausible no-ops that were actually rejections.**
+Same shape as §10: *a failed call rendered as a valid-looking empty result.*
+
+```bash
+# ✗ empty result == "nothing happened", no matter why
+newp=$(trigger "$ref"); [ -z "$newp" ] && say "no new pipeline"
+# ✓ surface the status; distinguish "rejected" from "pending"
+resp=$(curl -s -w '\n%{http_code}' -X POST ... )
+code=${resp##*$'\n'}; body=${resp%$'\n'*}
+case "$code" in
+  2*) echo "$body" | jq -r .id ;;
+  *)  echo "trigger FAILED http=$code: $body" >&2; return 1 ;;
+esac
+```
+
+**Rules**
+- **Parameterise the identity a supervisor watches** (`EXP_PATTERN`, `$1`, an env var) — never inline a
+  filename that a rename will orphan. If it *must* be literal, make the watchdog fail loudly when the
+  pattern matches nothing *and* nothing has produced output recently (absence of both = suspicion).
+- **Every network write (`POST`/`PUT`/`DELETE`) must check its status code.** "Empty response" and
+  "rejected request" are different facts; collapsing them hides outages behind tidy logs.
+- Corollary for monitors generally: **an alarm must name the evidence that triggered it**, so the
+  human can falsify it. "process gone" vs "no log line in 90m" is the difference between a bug report
+  and a wild goose chase.
