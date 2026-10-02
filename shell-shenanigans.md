@@ -215,3 +215,38 @@ one
   it is safe to loop over a directory in CI or a pre-commit hook. Parse with the *oldest* bash you
   ship to, not the newest you develop on. This is the scope box's *"don't trust the advertised
   shell"* one level down: not **which** shell, but **which version** of it.
+
+## §10 — a command substitution that captures a *status* can silently yield empty, and a `case`/guard then misfires
+
+The shape that bites: you capture a command's output, then gate on it.
+
+```bash
+src=$(python3 -c "...open('/tmp/f.json')..." )      # if this errors, src is ""
+case "$src" in
+  renovate/*) tick ;;
+  *) echo "skip non-renovate ($src)";;                # guard fires — but for the WRONG reason
+esac
+```
+
+If the substitution **fails**, `src` is the empty string, the `*)` branch matches, and the script
+reports a clean, plausible-looking skip ("non-renovate source ()") instead of an error. An empty
+value is indistinguishable from a legitimate empty value, so **a failed lookup masquerades as a
+decision**. In a "which items do I act on" loop this is a *false-negative*: you act on none and think
+you're done. (It can also invert — a guard `[[ "$x" != bad ]]` passes when `x` is empty.)
+
+Two compounding traps:
+- **`%s` inside a double-quoted `python3 -c "…"` is literal, not a format slot.** Only `printf`/`%`
+  *formatting* substitutes it; in plain string context it stays `%s` → `FileNotFoundError` →
+  empty `src` → the false-skip above. Use an f-string, `%`-formatting with args in a real script, or
+  a heredoc `<<'PY'` where `%s`/`$` are inert.
+- **`$?` of the *substitution* is not what you think** after assignment; check it on the same line
+  (`x=$(cmd) || { echo err; exit 1; }`) or capture `cmd` separately.
+
+Rules:
+- **Never let a status that drives control flow default to empty.** Fail loudly:
+  `src=$(cmd) || { echo "lookup failed" >&2; exit 1; }`, or `src=$(cmd); [ -n "$src" ] || exit 1`.
+- Prefer `python3 - <<'PY'` heredocs over `python3 -c "…"` for anything with `%s`, `$`, or nested
+  quotes — the quoted-heredoc form is inert and can't be silently mis-expanded.
+- Same family as **python-shenanigans §5** (`2>/dev/null` turning a parse error into an empty status)
+  and **§4** ("exited 0 / printed nothing" is not "it worked"): *empty output is not a valid value
+  unless you have positively established it is.*
