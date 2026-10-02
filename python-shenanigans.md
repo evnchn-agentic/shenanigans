@@ -62,3 +62,52 @@ python -c "import <pkg>; print(<pkg>.__file__)"       # verify it's the repo pat
 A Python script that imports a missing module, or whose multiprocessing child died, can still leave
 exit 0 on the parent / a benign-looking log. Run it, read the actual output / check the artifact —
 don't trust the absence of an error.
+
+## §5 — `\"` inside an f-string in an inline `python3 -c` → SyntaxError; `2>/dev/null` turns it into a silent empty string
+
+Parsing one field out of JSON in a poll loop, you reach for:
+
+```bash
+curl -s "$URL" | python3 -c 'import sys,json
+d=json.load(sys.stdin); print(f"{d.get(\"state\")}|{d.get(\"detailed_merge_status\")}")' 2>/dev/null
+```
+
+The `\"` is **self-inflicted**: the `-c` argument is already single-quoted, so inner double quotes need
+no escaping (see (a) below). Passed through anyway, the backslash lands *inside an f-string replacement
+field*, where it is not a string escape but a **line continuation**, and modern CPython rejects it:
+
+```
+SyntaxError: unexpected character after line continuation character
+```
+
+Alone that's loud. The kill is the `2>/dev/null` stapled on to keep the loop quiet: the command now
+prints **nothing** and exits 1, so `x=$(…)` is `""` and a test like `[ "$state" = merged ]` can never
+match. An empty status reads as "not done" — so a monitor loop **stalls silently until its timeout**
+while the thing it was watching already succeeded. (Burned exactly this way in a merge-train poll loop:
+the MR merged; the loop kept reading the empty string.)
+
+Three ways out, increasing in robustness:
+
+```bash
+# (a) drop the escaping — inner " are fine inside a single-quoted -c (CPython 3.12+ / PEP 701)
+python3 -c 'import sys,json; d=json.load(sys.stdin); print(f"{d.get("state")}|{d.get("detailed_merge_status")}")'
+
+# (b) portable, no nesting at all — %-format
+python3 -c 'import sys,json; d=json.load(sys.stdin); print("%s|%s" % (d["state"], d.get("detailed_merge_status")))'
+
+# (c) best — put the parser in a real file; pipe JSON to it
+cat > /tmp/mrinfo.py <<'PY'
+import sys, json
+d = json.load(sys.stdin)
+print("%s|%s" % (d.get("state"), d.get("detailed_merge_status")))
+PY
+curl -s "$URL" | python3 /tmp/mrinfo.py
+```
+
+Measured on CPython **3.14.7** — this is the tokenizer, not the old ≤3.11 "no backslash in f-strings"
+restriction, so a recent Python does *not* save you.
+
+**General rule (this is a special case): never `2>/dev/null` a parser whose output drives control
+flow.** If you must quiet it, preserve the exit status (`… || echo PARSE_FAIL`, or `${PIPESTATUS[1]}`)
+so a broken parse is a *distinct* value instead of masquerading as valid empty output. Same family as
+§4 — "it exited 0 / printed nothing" is not "it worked".
