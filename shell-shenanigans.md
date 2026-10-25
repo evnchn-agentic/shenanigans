@@ -296,3 +296,43 @@ esac
 - Corollary for monitors generally: **an alarm must name the evidence that triggered it**, so the
   human can falsify it. "process gone" vs "no log line in 90m" is the difference between a bug report
   and a wild goose chase.
+
+## §12 — macOS userland rejects the GNU flags you type by reflex, and one of the failures is silent
+
+Most shell examples online assume GNU userland. macOS ships BSD tools and a
+2007 bash, so commands that are "obviously right" fail on the first try:
+
+```console
+$ printf 'a b\nc\n' | xargs -d '\n' -n1 echo
+xargs: invalid option -- d
+$ /bin/bash -c 'read -t 1.5 x < <(sleep 3); echo rc=$?'
+/bin/bash: line 0: read: 1.5: invalid timeout specification
+rc=1
+```
+
+The `xargs` one is loud. The `read` one is the trap: bash 3.2 (`/bin/bash`, also the macOS CI image)
+rejects a **fractional** timeout and returns **immediately** with status 1. With stderr sent to
+`/dev/null` the diagnostic is gone too, so a "wait up to 1.5 s" loop silently becomes a busy loop or
+skips the wait entirely. Fractional timeouts arrived in bash 4.0.
+
+- **Cure for scripts:** `tr '\n' '\0' | xargs -0` instead of `xargs -d '\n'` (works on both);
+  integer `read -t 2`, or require a modern bash (see §9 for checking with the *oldest* bash you ship to).
+- **Cure for a machine where agents or you type GNU by reflex:** put a few GNU tools first on `PATH`
+  (`brew install coreutils findutils util-linux`; a directory before `/usr/bin` holding `xargs`,
+  `readlink`, `cat`, and util-linux's `setsid`, which macOS lacks). **Accepting the same flags is not
+  the same behavior, so audit before shadowing:**
+  - GNU `xargs` runs the command **once on empty input**; BSD runs it zero times. `pgrep x | xargs kill`
+    then runs a bare `kill`. Shadow it with a wrapper, `exec gxargs -r "$@"`, to keep BSD's skip.
+    GNU also rejects BSD's `-J`, `-R` and `-S`.
+  - GNU `readlink -f` succeeds when only the final path component is missing; BSD fails. Scripts
+    that used it as an existence check change meaning.
+  - GNU `cat` lacks BSD's `-l` (output locking).
+  Grep your scripts for those before switching.
+- **Leave `sed`, `date`, `stat`, `ls` and `find` as BSD** unless you audit every script: their flags
+  genuinely clash (`sed -i ''`, `date -v -1d`, `stat -f`, `ls -G`, `find -E`), so a blanket
+  `gnubin`-first `PATH` trades loud first-try errors for quiet misbehavior in old scripts. Call
+  `gsed`, `gdate`, `gstat`, `gls`, `gfind` by name instead.
+- **Check what a new shell will see, not your current one:** a `PATH` change in a startup file only
+  reaches shells that read that file afterwards (a login shell reads `.zprofile`, `zsh -lc` does not
+  read `.zshrc`), so test with the same kind of shell, e.g. `zsh -lc 'command -v xargs'`. Shells that
+  are already running keep the old `PATH` until they re-source the file or restart.
