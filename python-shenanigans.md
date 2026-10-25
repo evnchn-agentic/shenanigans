@@ -109,10 +109,10 @@ restriction, so a recent Python does *not* save you. An older one fails too, wit
 (`f-string expression part cannot include a backslash` on 3.9 and 3.11), so a grep for one misses the
 other.
 
-**(a) needs 3.12 or newer, and the `python3` a stock Mac resolves to is not.** With no venv on `PATH`
-it is the Command Line Tools' 3.9, where (a) is itself a SyntaxError, and with `2>/dev/null` it
-reproduces the exact silent empty string this section is about. Use (b) or (c) when you don't control
-the interpreter.
+**(a) needs 3.12 or newer, and `/usr/bin/python3` on macOS is not.** It is the Command Line Tools'
+3.9, where (a) is itself a SyntaxError, and with `2>/dev/null` it reproduces the exact silent empty
+string this section is about. A bare `python3` lands there whenever nothing newer is earlier on
+`PATH`, so check with `python3 -V`, and use (b) or (c) when you don't control the interpreter.
 
 **General rule (this is a special case): never `2>/dev/null` a parser whose output drives control
 flow.** If you must quiet it, preserve the exit status (`… || echo PARSE_FAIL`, or `${PIPESTATUS[1]}`)

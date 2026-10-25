@@ -240,9 +240,9 @@ Two compounding traps:
   empty `src` → the false-skip above. Use an f-string, `%`-formatting with args in a real script, or
   a heredoc `<<'PY'` where `%s`/`$` are inert.
 - **`local`, `export`, `readonly` and `declare` replace the substitution's status with their own.** A
-  bare `x=$(false)` leaves `$?` at 1 in bash, zsh, dash and ksh, so `x=$(cmd) || …` works. Inside a
-  function the same line is usually written `local x=$(cmd) || …`, and there `$?` is 0 (the status of
-  `local`), so the guard never fires. Declare first, assign on its own line:
+  bare `x=$(false)` leaves `$?` at 1 in bash, zsh, dash and ksh, so `x=$(cmd) || …` works. In a bash,
+  zsh or dash function the same line is usually written `local x=$(cmd) || …`, and there `$?` is 0
+  (the status of `local`), so the guard never fires. Declare first, assign on its own line:
   `local x; x=$(cmd) || { echo err; exit 1; }`.
 
 Rules:
