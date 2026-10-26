@@ -239,8 +239,11 @@ Two compounding traps:
   *formatting* substitutes it; in plain string context it stays `%s` → `FileNotFoundError` →
   empty `src` → the false-skip above. Use an f-string, `%`-formatting with args in a real script, or
   a heredoc `<<'PY'` where `%s`/`$` are inert.
-- **`$?` of the *substitution* is not what you think** after assignment; check it on the same line
-  (`x=$(cmd) || { echo err; exit 1; }`) or capture `cmd` separately.
+- **`local`, `export`, `readonly` and `declare` replace the substitution's status with their own.** A
+  bare `x=$(false)` leaves `$?` at 1 in bash, zsh, dash and ksh, so `x=$(cmd) || …` works. In a bash,
+  zsh or dash function the same line is usually written `local x=$(cmd) || …`, and there `$?` is 0
+  (the status of `local`), so the guard never fires. Declare first, assign on its own line:
+  `local x; x=$(cmd) || { echo err; exit 1; }`.
 
 Rules:
 - **Never let a status that drives control flow default to empty.** Fail loudly:
@@ -317,6 +320,9 @@ skips the wait entirely. Fractional timeouts arrived in bash 4.0.
 
 - **Cure for scripts:** `tr '\n' '\0' | xargs -0` instead of `xargs -d '\n'` (works on both);
   integer `read -t 2`, or require a modern bash (see §9 for checking with the *oldest* bash you ship to).
+  An integer timeout does wait on 3.2, but a timeout there returns 1, the same as end of input; the
+  greater-than-128 timeout status also arrived in 4.0, so on 3.2 a `[ $? -gt 128 ]` timeout branch
+  never runs.
 - **Cure for a machine where agents or you type GNU by reflex:** put a few GNU tools first on `PATH`
   (`brew install coreutils findutils util-linux`; a directory before `/usr/bin` holding `xargs`,
   `readlink`, `cat`, and util-linux's `setsid`, which macOS lacks). **Accepting the same flags is not
