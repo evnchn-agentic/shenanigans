@@ -38,3 +38,25 @@ git bundle create ~/backup-$(git rev-parse --short HEAD).bundle --all   # before
 ```
 Force-push to a branch with an open PR **can dismiss existing approvals** (if the repo enables "dismiss
 stale reviews"). Default to add-commit-on-top, not force-push, on PRs under review.
+
+## §4 — commit messages cross-reference upstream when a fork PR opens, even with clean PR prose
+
+**Escaping the PR body may not be enough.** A fork branch built on top of an upstream branch carries
+that branch's commits. In one observed case, a fork PR whose commit messages named an upstream issue
+left a cross-reference on that upstream issue's timeline, with the PR prose escaped. Nobody commented.
+The mechanism is not verified beyond that single instance; treat it as a risk to check, not a
+guaranteed result. Closing the PR did not remove the timeline entry in that case.
+
+So a fence written as "don't post outward" has to cover outward **effects**, not only outward
+**actions**. Before the first push of any branch whose commits are not all yours:
+
+```bash
+BASE=upstream/main   # or the upstream branch this branch sits on
+git log --format=%s%n%b "$BASE"..HEAD | grep -nE '#[0-9]+|[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[0-9]+|github\.com/[^ ]+/(issues|pull)/[0-9]+'
+```
+
+- Any hit: a commit message names another repo's issue or PR. Reword it before the first push if the
+  reference is unwanted (`git rebase -i` in a real terminal, or `git filter-branch -f --msg-filter` on the
+  local branch only). Once pushed, a reference may not be retractable.
+- A bare `#[0-9]+` check misses issue/PR URLs. Use the full pattern above.
+- The check covers commit messages only. Prose in the PR body is a separate surface (see gfm).
