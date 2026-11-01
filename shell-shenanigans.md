@@ -342,3 +342,30 @@ skips the wait entirely. Fractional timeouts arrived in bash 4.0.
   reaches shells that read that file afterwards (a login shell reads `.zprofile`, `zsh -lc` does not
   read `.zshrc`), so test with the same kind of shell, e.g. `zsh -lc 'command -v xargs'`. Shells that
   are already running keep the old `PATH` until they re-source the file or restart.
+
+## §13 — `cut -f2-` on a line with no delimiter echoes the whole line, so a "pop the head" loop never empties
+
+`cut` passes through any line that contains no delimiter, unless you pass `-s` (`--only-delimited`).
+A list that has shrunk to one element has no delimiter left, so `cut -f2-` returns it unchanged
+instead of an empty string. The loop keeps seeing the same last item and never exits.
+
+```bash
+list="w1:p1 w2:p2 w3:p3"
+while [ -n "$list" ]; do
+  head=${list%% *}
+  list=$(printf '%s' "$list" | cut -d' ' -f2-)   # BUG: after w3:p3 is popped, list stays "w3:p3"
+done                                              # -> pops w3:p3 forever
+```
+
+Measured on macOS (BSD `cut`, bash 5.3): `printf 'wC:p1' | cut -d' ' -f2-` prints `wC:p1`.
+Adding `-s` prints nothing, which is the empty string the loop needs. With `-s` the three-pane loop
+pops `w1:p1`, `w2:p2`, `w3:p3` and stops.
+
+- **Cure:** add `-s` whenever `cut` pops or strips a delimited field and a missing delimiter should
+  mean "nothing left". Or avoid `cut`: `read -r head rest <<<"$list"`, or a bash array with
+  `"${arr[@]:1}"`.
+- **Why it hides:** the first pass through the loop is correct, so a test that checks only the first
+  element passes. The bug appears when the list is down to its last element, which is the case the
+  loop must end on.
+- **Field evidence:** a spawner that filled three slots by popping one pane per slot popped the same
+  pane three times.
