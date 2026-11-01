@@ -345,27 +345,32 @@ skips the wait entirely. Fractional timeouts arrived in bash 4.0.
 
 ## §13 — `cut -f2-` on a line with no delimiter echoes the whole line, so a "pop the head" loop never empties
 
-`cut` passes through any line that contains no delimiter, unless you pass `-s` (`--only-delimited`).
-A list that has shrunk to one element has no delimiter left, so `cut -f2-` returns it unchanged
-instead of an empty string. The loop keeps seeing the same last item and never exits.
+`cut` passes through any line that contains no delimiter, unless you pass `-s`. A list that has shrunk
+to one element has no delimiter left, so `cut -f2-` returns that element unchanged instead of an empty
+string. The loop then reads the same head on every pass and never exits. (`-s` works on BSD and GNU
+`cut`; the long form `--only-delimited` is GNU-only and fails on macOS.)
 
 ```bash
 list="w1:p1 w2:p2 w3:p3"
 while [ -n "$list" ]; do
   head=${list%% *}
-  list=$(printf '%s' "$list" | cut -d' ' -f2-)   # BUG: after w3:p3 is popped, list stays "w3:p3"
-done                                              # -> pops w3:p3 forever
+  list=$(printf '%s' "$list" | cut -d' ' -f2-)   # BUG: when head is w3:p3, cut returns it unchanged
+done                                              # -> the loop never sees an empty list
 ```
 
 Measured on macOS (BSD `cut`, bash 5.3): `printf 'wC:p1' | cut -d' ' -f2-` prints `wC:p1`.
-Adding `-s` prints nothing, which is the empty string the loop needs. With `-s` the three-pane loop
-pops `w1:p1`, `w2:p2`, `w3:p3` and stops.
+With `-s` it prints nothing. With `-s`, the three-item loop pops `w1:p1`, `w2:p2`, `w3:p3` and stops.
+Plain `cut` pops the same three, then repeats `w3:p3` until the iteration bound.
 
-- **Cure:** add `-s` whenever `cut` pops or strips a delimited field and a missing delimiter should
-  mean "nothing left". Or avoid `cut`: `read -r head rest <<<"$list"`, or a bash array with
-  `"${arr[@]:1}"`.
+- **Cure (recommended):** read the head and the rest in one step.
+  `IFS=' ' read -r head rest <<<"$list"; list=$rest`. It also handles leading and doubled spaces.
+- **`cut -s` is only safe for single-spaced lists.** With leading or doubled spaces, `${list%% *}`
+  yields an empty head, and `cut -s` shifts fields so heads come out empty too. Measured: a list of
+  `"  w1:p1  w2:p2 w3:p3"` gives six passes, three of them with an empty head, under `cut -s`. The
+  `read` form gives three correct passes.
 - **Why it hides:** the first pass through the loop is correct, so a test that checks only the first
   element passes. The bug appears when the list is down to its last element, which is the case the
   loop must end on.
-- **Field evidence:** a spawner that filled three slots by popping one pane per slot popped the same
-  pane three times.
+- **Field evidence (unverified field note):** a spawner filling three slots, whose list had shrunk to
+  one remaining pane, popped that same pane for every remaining slot. A list with three distinct
+  items pops them in order; the repeat only happens once one element is left.
