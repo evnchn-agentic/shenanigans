@@ -39,7 +39,7 @@ git bundle create ~/backup-$(git rev-parse --short HEAD).bundle --all   # before
 Force-push to a branch with an open PR **can dismiss existing approvals** (if the repo enables "dismiss
 stale reviews"). Default to add-commit-on-top, not force-push, on PRs under review.
 
-## §4 — a fork PR can cross-reference upstream from its commits, and escaped prose does not prevent it
+## §4 — a fork PR can cross-reference upstream, and escaping its prose does not prevent it
 
 **Escaping the PR body is not enough.** A fork branch built on top of an upstream branch carries
 that branch's commits. In one observed case, a fork PR whose commit messages named an upstream issue

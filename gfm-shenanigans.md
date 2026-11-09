@@ -7,7 +7,7 @@
 > **Catastrophic:** a bare `#N` in a GitHub conversation autolinks to issue/PR N **and posts a
 > cross-reference into that ticket's timeline. Treat it as irreversible** — editing/deleting your
 > comment does NOT retract it (a deleted comment still leaves its backlinks; there is no API to remove
-> a cross-reference event). Fires on even a one-line reply → prose or backticks **before the first post**.
+> a cross-reference event). Fires on even a one-line reply → prose, backticks or `#<span></span>N` **before the first post**.
 > **A backslash does not help:** in a comment, `\#N` and `owner/repo\#N` still render as live links
 > and still cross-reference (see the suppression row below).
 > - `@name` is a *different* trap: it **pings** that user (no take-backs) — don't `@` a stranger.
