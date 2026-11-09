@@ -39,13 +39,16 @@ git bundle create ~/backup-$(git rev-parse --short HEAD).bundle --all   # before
 Force-push to a branch with an open PR **can dismiss existing approvals** (if the repo enables "dismiss
 stale reviews"). Default to add-commit-on-top, not force-push, on PRs under review.
 
-## §4 — commit messages cross-reference upstream when a fork PR opens, even with clean PR prose
+## §4 — a fork PR can cross-reference upstream from its commits, and escaped prose does not prevent it
 
-**Escaping the PR body may not be enough.** A fork branch built on top of an upstream branch carries
+**Escaping the PR body is not enough.** A fork branch built on top of an upstream branch carries
 that branch's commits. In one observed case, a fork PR whose commit messages named an upstream issue
-left a cross-reference on that upstream issue's timeline, with the PR prose escaped. Nobody commented.
-The mechanism is not verified beyond that single instance; treat it as a risk to check, not a
-guaranteed result. Closing the PR did not remove the timeline entry in that case.
+left a cross-reference on that upstream issue's timeline. Nobody commented upstream. The PR body also
+named that issue as `` `owner/repo`\#N ``, and that escaped form still renders as a live link (see
+gfm), so this case does not show which of the two caused it. A later comment on the same PR named a
+second upstream issue only in the escaped form, and that issue got a cross-reference one second after
+the comment was posted. So the escaped prose is enough on its own; whether commit messages alone are
+is not isolated. Treat both as risks. Closing the PR did not remove the timeline entries.
 
 So a fence written as "don't post outward" has to cover outward **effects**, not only outward
 **actions**. Before the first push of any branch whose commits are not all yours:

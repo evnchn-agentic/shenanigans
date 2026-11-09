@@ -364,6 +364,8 @@ Plain `cut` pops the same three, then repeats `w3:p3` until the iteration bound.
 
 - **Cure (recommended):** read the head and the rest in one step.
   `IFS=' ' read -r head rest <<<"$list"; list=$rest`. It also handles leading and doubled spaces.
+  `<<<` is bash/zsh/ksh only: dash (`/bin/sh` on Debian and Ubuntu) rejects it as a syntax error.
+  POSIX form: `set -f; set -- $list; head=$1; shift; list=$*` (it overwrites `$@` and leaves globbing off until `set +f`).
 - **`cut -s` is only safe for single-spaced lists.** With leading or doubled spaces, `${list%% *}`
   yields an empty head, and `cut -s` shifts fields so heads come out empty too. Measured: a list of
   `"  w1:p1  w2:p2 w3:p3"` gives six passes, three of them with an empty head, under `cut -s`. The
