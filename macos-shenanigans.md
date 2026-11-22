@@ -57,7 +57,9 @@ review** — you believe you reverted, and you did not.
 
 **Cures**, in order of preference:
 - `git mv old new` — handles case-only renames correctly even without `-f`.
-- `git config core.ignorecase false` in that repo — git then sees the rename as add+delete.
+- **Not `git config core.ignorecase false`.** On a case-insensitive volume git then sees only an
+  untracked `?? logo.webp` — no delete, because `Logo.webp` still resolves. A following
+  `git add -A && git commit` records **both** spellings: the case-colliding paths of §3 below.
 - To undo it: **`rm` the wrongly-cased file, then `git checkout -- .`** This is the one that
   always works, because the path is genuinely absent when checkout runs.
 - **`git reset --hard` is NOT a reliable undo here**, despite looking like the obvious one. It
@@ -94,8 +96,17 @@ not a documented guarantee, and the survivor's spelling is what an explicit path
 Treat the state as unsafe to commit from, not as safe-by-construction. Either way CI is green
 on Linux while the Mac dev is permanently dirty and cannot bisect or `stash` cleanly.
 
-**Cure:** put that checkout on a case-sensitive volume —
-`diskutil apfs addVolume disk1 "Case-sensitive APFS" code` — and work there.
+**Cure:** put that checkout on a case-sensitive volume and work there. Look the container up;
+never copy a disk number. On an Apple Silicon Mac, `disk1` can be the small iBoot system
+container (`Apple_APFS_ISC`) while the one holding `/` is `disk3`:
+
+```console
+$ diskutil apfs addVolume "$(diskutil info / | awk '/APFS Container:/{print $3}')" "Case-sensitive APFS" code
+```
+
+Or skip the container entirely with a disk image:
+`hdiutil create -size 20g -fs "Case-sensitive APFS" -volname code -type SPARSE code.sparseimage`,
+then `hdiutil attach code.sparseimage`.
 
 ## §4 — proving it on Linux: a bind mount from APFS LEAKS the case-insensitivity
 

@@ -40,15 +40,18 @@ const uint8_t x = src[0];     // or value-initialize:  int x{};  /  int x = 0;
 
 - build the repro at **`-O0`** — the optimizer is far less likely to fold the bad read away, but
   **`-O0` alone is not a reliable detector**: it only shows you whatever the stack slot happened to
-  hold, which can be the lucky value. (Apple clang 21, macOS/arm64: the memcpy repro above prints a
-  clean `8` at `-O0` *and* at `-O2`; only pattern-init below surfaced it.) Treat `-O0` as one more
-  sample, not as proof;
+  hold, which can be the lucky value. (Apple clang 21, macOS/arm64: at `-O0` the memcpy repro above
+  printed `0xF73F0008` in one harness and a clean `8` in another whose earlier call had left zeros in
+  that slot; `-O2` printed `8` in both.) Treat `-O0` as one more sample, not as proof;
 - **`-ftrivial-auto-var-init=pattern`** (Clang & GCC ≥12) fills uninitialized locals with a fixed
   pattern so "sometimes garbage" becomes *deterministic* garbage you can see — but the **pattern byte
   differs by compiler**: Clang uses `0xAA` (the `int x` above then reads `0xAAAAAA08`, not a lucky
   `8`), GCC currently uses `0xFE` (and documents that it may change);
-- **`-fsanitize=memory`** (MSan — **Clang/LLVM only; GCC has no MSan**) *reports* the uninitialized
-  read directly, given sufficiently instrumented code;
+- **`-fsanitize=memory`** (MSan — **Clang/LLVM on Linux, FreeBSD and NetBSD; GCC has no MSan, and Apple
+  clang rejects the flag**) *reports* the uninitialized read directly, given sufficiently instrumented code —
+  **but only if the read survives optimization.** Linux clang 19 reported the repro above at `-O0`
+  and was silent at `-O1` and `-O2`, which had already folded the read into `8`. Run MSan at `-O0`
+  too, or rely on pattern-init, which surfaced it at every level on both compilers;
 - the manifestation is **optimization-level, compiler, and ABI dependent — not something you can pin
   on the instruction set**: swapping x86 ↔ ARM ↔ MIPS won't reliably surface it (the readable
   `store-1-byte / load-4-bytes` shape is the same on every ISA), though ISA/ABI can affect *how* it
